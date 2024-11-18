@@ -1,50 +1,61 @@
-import pandas as pd
+import os
+import time
 
 from binance.client import Client
+from requests.exceptions import HTTPError
+
+import pandas as pd
+from IPython import embed
 
 
 class BinanceService:
 
-    def __init__(self, api_key, secret_key):
+    def __init__(self, api_key, secret_key, output_dir="crypto_data"):
         self.client = Client(api_key, secret_key)
+        self.output_dir = output_dir 
 
-    def fetch_historical_data(self, symbol:str, interval: str = "1h", limit: int = 90):
-        klines = self.client.get_klines(
-            symbol=symbol,
-            interval=interval,
-            limit=limit
-        )
-        
-        data = {
-            "time": [int(k[0]) for k in klines],
-            "open": [float(k[1]) for k in klines],
-            "high": [float(k[2]) for k in klines],
-            "low": [float(k[3]) for k in klines],
-            "close": [float(k[4]) for k in klines],
-            "volume": [float(k[5]) for k in klines]
-        }
-        
-        df = pd.DataFrame(data)
 
-        # Convert the time
-        df["time"] = pd.to_datetime(df["time"], unit="ms")
-
-        # Technical indicators
-        df["SMA_14"] = df["close"].rolling(window=14).mean()  # SMA de 14 períodos
-        df["EMA_14"] = df["close"].ewm(span=14, adjust=False).mean()  # EMA de 14 períodos
+    def fetch_historical_data(self, symbol, interval="1h", start_date="2017-01-01"):
+        all_data = []
+        start_timestamp = int(pd.to_datetime(start_date).timestamp() * 1000)
+        max_attemps = 5
     
-        # RSI
-        delta = df["close"].diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-        rs = gain / loss
-        df["RSI_14"] = 100 - (100 / (1 + rs))
+        while True:
+            try:
+                klines = self.client.get_klines(
+                    symbol=symbol,
+                    interval=interval,
+                    startTime=start_timestamp,
+                    limit=1000
+                )
+                if not klines:
+                    break
+                for kline in klines:
+                    all_data.append({
+                        "time": pd.to_datetime(kline[0], unit="ms"),  # Timestamp en milisegundos
+                        "open": float(kline[1]),
+                        "high": float(kline[2]),
+                        "low": float(kline[3]),
+                        "close": float(kline[4]),
+                        "volume": float(kline[5])
+                    })
 
-        # Bollinger Bands
-        df["BB_MID"] = df["close"].rolling(window=20).mean()  # SMA de 20 períodos
-        df["BB_UPPER"] = df["BB_MID"] + 2 * df["close"].rolling(window=20).std()
-        df["BB_LOWER"] = df["BB_MID"] - 2 * df["close"].rolling(window=20).std()
-        
+                start_timestamp = klines[-1][0] + 1
+                print(f"Fetched {len(klines)} rows, total: {len(all_data)} rows")
+
+                time.sleep(0.2)
+            except HTTPError as http_err:
+                print(f"HTTP error ocurred: {http_err}")
+                break
+            except Exception as e:
+                print(f"Error: {e}")
+                max_attemps -= 1
+                if max_attemps == 0:
+                    print("Max retries reacehd. Exiting...")
+                    break
+                time.sleep(1)
+
+        df = pd.DataFrame(all_data)
         return df
 
     def test_connection(self):
