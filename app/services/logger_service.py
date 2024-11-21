@@ -1,6 +1,7 @@
 import os
 import logging
 from datetime import datetime
+from typing import Optional
 
 
 class LoggerService:
@@ -39,6 +40,36 @@ class LoggerService:
         )
 
         self.logger = logging.getLogger("LoggerService")
+        self.default_context = {
+            "session": "N/A",
+            "symbol": "N/A",
+            "risk": "N/A",
+            "event": "N/A"
+        }
+
+    def set_context(
+        self, session: Optional[str] = None,
+        symbol: Optional[str] = None,
+        risk: Optional[str] = None,
+        event: Optional[str] = None):
+        """
+        Set default context for the logger.
+
+        Args:
+        -----
+            session (str): Identifier for the session.
+            symbol (str): Symbol being analyzed.
+            risk (str): Risk level (if applicable).
+            event (str): Event description.
+        """
+        if session:
+            self.default_context["session"] = session
+        if symbol:
+            self.default_context["symbol"] = symbol
+        if risk:
+            self.default_context["risk"] = risk
+        if event:
+            self.default_context["event"] = event
 
     def log(self, level: str, message: str):
         """
