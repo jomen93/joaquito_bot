@@ -7,6 +7,12 @@ from requests.exceptions import HTTPError
 from binance.client import Client
 from app.services.risk_analysis import RiskAnalysis
 from app.services.logger_service import LoggerService
+from app.config import (
+    USE_TESTNET,
+    TESTNET_API_KEY, 
+    TESTNET_SECRET_KEY,
+    BINANCE_API_KEY,
+    BINANCE_SECRET_KEY)
 
 from IPython import embed
 
@@ -14,10 +20,18 @@ from IPython import embed
 class BinanceService:
 
     def __init__(self, api_key, secret_key, output_dir="crypto_data"):
-        self.client = Client(api_key, secret_key)
+        
         self.output_dir = output_dir
         self.logger = LoggerService()
         self.risk_analyzer = RiskAnalysis()
+
+        if USE_TESTNET:
+            self.logger.log("INFO", "Initializate Binance Client in TESTNET mode.")
+            self.client = Client(TESTNET_API_KEY, TESTNET_SECRET_KEY)
+            self.client.API_URL = "https://testnet.binance.vision/api"
+        else:
+            self.logger.log("INFO", "Initializating Binance Cliente in REAL MARKET mode.")
+            self.client = Client(BINANCE_API_KEY, BINANCE_SECRET_KEY)
 
     def _is_data_stale(self, symbol, interval="1h"):
         file_path = os.path.join(self.output_dir, f"{symbol}_{interval}.csv")
@@ -90,6 +104,53 @@ class BinanceService:
         df.to_csv(os.path.join(self.output_dir, f"{symbol}_{interval}.csv"), index=False)
         self.logger.log("INFO", f"Data saved for {symbol}. Total rows: {len(df)}")
         return df
+
+    def create_order(self, symbol: str, order_type: str, quantity: float, price=None):
+        """
+        Create a order Buy/Sell based on the investment environment 
+
+        Args:
+        -----
+            symbol (str): Cryptocurrency pair
+            side (str): buy or sell
+            order_type (str): Order type "Market" or "Limit"
+            quantity (float): Quantity to buy/sell
+            price (float, Optional); Price (Required for limit orders)
+
+        Returns:
+        --------
+            dict: API response (or simulated in the case of Testnet)
+        """
+        try:
+            if order_type == Client.ORDER_TYPE_LIMIT:
+                if not price:
+                    raise ValueError("Price is required for LIMIT orders.")
+                order = self.client.create_order(
+                    symbol=symbol,
+                    side=side,
+                    type=order_type,
+                    quantity=quantity,
+                    price=price
+                )
+
+            elif order_type == Client.ORDER_TYPE_MARKET:
+                order = self.client.create_order(
+                    symbol=symbol,
+                    side=side,
+                    type=order_type,
+                    quantity=quantity
+                )
+            else:
+                raise ValueError("Invalid order type specified")
+
+            self.logger.log("INFO", f"Order created successfully: {order}")
+            return order
+
+        except Exception as e:
+            self.logger.log("ERROR", f"Failed to create order: {e}")
+            return None
+
+
 
     def test_connection(self):
 
